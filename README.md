@@ -1,2 +1,2 @@
 # smart-home-
-Projet maison intelligente IoT -- Arduino / Raspberry / Android
+Projet maison intelligente IoT -- Arduino / Raspberry / FireBase / Android
