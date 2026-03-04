@@ -21,17 +21,17 @@ void setup() {
 
 void loop() {
 
-  // 1️⃣ Lire capteurs
+  // 1️ Lire capteurs
   float temp = LireTemperature();
   float hum = LireHumidite();
   int lum = LireLuminosite();
   bool mouv = DetecterMouvement();
   bool choc = DetecterChoc();
 
-  // 2️⃣ Envoyer données
+  // 2️ Envoyer données
   EnvoyerJSON(temp, hum, lum, mouv, choc);
 
-  // 3️⃣ Vérifier commandes
+  // 3️ Vérifier commandes
   LireCommande();
 
   delay(5000);  // Attendre 5 secondes
