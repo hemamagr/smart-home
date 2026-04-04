@@ -79,13 +79,17 @@ while True:
 
         # ENVOI VERS FIREBASE
         if data_a_envoyer:
-            # Ajout d'une date/heure pour l'historique
-            data_a_envoyer['derniere_maj'] = datetime.datetime.now()
+            maintenant = datetime.datetime.now()
+            data_a_envoyer['timestamp'] = maintenant
             
-            # Envoi dans la collection 'maison', document 'salon'--creation pour la premiere fois ds firbase 
+            # 2. MISE À JOUR "TEMPS RÉEL" (On écrase pour l'affichage direct sur l'app)
             db.collection('maison').document('salon').set(data_a_envoyer, merge=True)
-            print(" Synchronisation Cloud : OK")
-
+            
+            # 3. CRÉATION DE L'HISTORIQUE (On ajoute une nouvelle fiche à chaque fois)
+            # .add() génère un identifiant unique automatiquement
+            db.collection('maison').document('salon').collection('historique').add(data_a_envoyer)
+            
+            print(f" Synchronisation Cloud : Temps Réel OK + Historique archivé ({maintenant.strftime('%H:%M:%S')})")
     except KeyboardInterrupt:
         print("\nArrêt de la passerelle...")
         break
