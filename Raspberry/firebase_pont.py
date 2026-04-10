@@ -4,95 +4,145 @@ import serial
 import serial.tools.list_ports
 import json
 import time
-import datetime
 
 # ==========================================
-# 1. CONFIGURATION FIREBASE
+# 1. FIREBASE INIT
 # ==========================================
 try:
     cred = credentials.Certificate(r"C:\Users\PC1\Documents\Arduino\smart_home\Raspberry\cle_firebase.json")
     firebase_admin.initialize_app(cred)
     db = firestore.client()
-    print(" Connexion Firebase : RÉUSSIE")
+
+    print(" Connexion Firebase RÉUSSIE")
+
+    USER_ID = "test_user_L3"
+
 except Exception as e:
-    print(f" Erreur de connexion Firebase : {e}")
+    print(f" Erreur Firebase : {e}")
     exit()
 
 # ==========================================
-# 2. DÉTECTION AUTOMATIQUE DE L'ARDUINO
+# 2. QUOTA HISTORIQUE
+# ==========================================
+INTERVALLE_HISTORIQUE = 900  # 900s pour enregistrer chaque 15min , ne pas saturer 
+derniere_archive = 0
+
+# ==========================================
+# 3. ARDUINO DETECTION
 # ==========================================
 def trouver_port_arduino():
     ports = list(serial.tools.list_ports.comports())
     for p in ports:
-        # On cherche des mots-clés typiques des drivers Arduino/USB
-        if any(keyword in p.description for keyword in ["Arduino", "USB", "CH340", "CP210"]):
+        if any(x in p.description for x in ["Arduino", "USB", "CH340", "CP210"]):
             return p.device
     return None
 
-def connecter_serie():
-    port = trouver_port_arduino()
-    if port:
-        try:
-            ser = serial.Serial(port, 9600, timeout=1)
-            time.sleep(2) # Pause pour laisser l'Arduino rebooter
-            print(f" Arduino détecté sur {port}")
-            return ser
-        except:
-            return None
-    return None
+ser = None
+port = trouver_port_arduino()
 
-# Initialisation de la connexion série
-ser = connecter_serie()
-
-if not ser:
-    print(" Aucun Arduino trouvé. MODE SIMULATION activé.")
+if port:
+    try:
+        ser = serial.Serial(port, 9600, timeout=1)
+        time.sleep(2)
+        print(f" Arduino détecté sur {port}")
+    except:
+        print(" Impossible d'ouvrir le port série")
+else:
+    print(" MODE SIMULATION")
 
 # ==========================================
-# 3. BOUCLE PRINCIPALE (LE PONT)
+# 4. LOOP PRINCIPAL
 # ==========================================
-print("\n--- Passerelle en service (Ctrl+C pour quitter) ---")
+print("\n Passerelle en service")
 
 while True:
     try:
-        data_a_envoyer = None
+        data_brute = None
 
-        # CAS A : Lecture du vrai Arduino
+        # Lecture Arduino
         if ser and ser.in_waiting > 0:
             ligne = ser.readline().decode('utf-8').strip()
-            
-            # On vérifie si c'est du JSON (commence par { et finit par })
-            if ligne.startswith("{") and ligne.endswith("}"):
+            if ligne.startswith("{"):
                 try:
-                    data_a_envoyer = json.loads(ligne)
-                    print(f" Reçu de l'Arduino : {data_a_envoyer}")
-                except json.JSONDecodeError:
-                    print(f"Erreur de formatage JSON : {ligne}")
+                    data_brute = json.loads(ligne)
+                except:
+                    pass
 
-        # CAS B : Simulation manuelle (si pas d'Arduino ou pas de message)
+        # Simulation
         elif not ser:
-            simu = input("\nSimulation (Tape le JSON ou 'exit') : ")
-            if simu.lower() == 'exit': break
+            simu = input("\nJSON: ")
             try:
-                data_a_envoyer = json.loads(simu)
+                data_brute = json.loads(simu)
             except:
-                print(" Format invalide. Exemple : {\"temp\": 25, \"hum\": 60}")
+                print("JSON invalide")
 
-        # ENVOI VERS FIREBASE
-        if data_a_envoyer:
-            maintenant = datetime.datetime.now()
-            data_a_envoyer['timestamp'] = maintenant
-            
-            # 2. MISE À JOUR "TEMPS RÉEL" (On écrase pour l'affichage direct sur l'app)
-            db.collection('maison').document('salon').set(data_a_envoyer, merge=True)
-            
-            # 3. CRÉATION DE L'HISTORIQUE (On ajoute une nouvelle fiche à chaque fois)
-            # .add() génère un identifiant unique automatiquement
-            db.collection('maison').document('salon').collection('historique').add(data_a_envoyer)
-            
-            print(f" Synchronisation Cloud : Temps Réel OK + Historique archivé ({maintenant.strftime('%H:%M:%S')})")
+        if data_brute:
+
+            temps_actuel = time.time()
+            ok_pour_archive = (temps_actuel - derniere_archive) >= INTERVALLE_HISTORIQUE
+
+            # IMPORTANT : lecture de la pièce UNE SEULE FOIS
+            piece = data_brute.get("piece", "salon")
+
+            for cle, valeur in data_brute.items():
+
+                if cle in ["piece", "timestamp"]:
+                    continue
+
+                sensor_id = f"{cle}_{piece}"
+
+                sensor_ref = db.collection("users")\
+                    .document(USER_ID)\
+                    .collection("sensors")\
+                    .document(sensor_id)
+
+                # =========================
+                # 1. TEMPS REEL
+                # =========================
+                sensor_ref.set({
+                    "valeur": valeur,
+                    "nom": cle,
+                    "piece": piece,
+                    "updatedAt": firestore.SERVER_TIMESTAMP
+                }, merge=True)
+
+                # =========================
+                # 2. HISTORIQUE
+                # =========================
+                if ok_pour_archive:
+                    sensor_ref.collection("history").add({
+                        "valeur": valeur,
+                        "timestamp": firestore.SERVER_TIMESTAMP
+                    })
+
+                # =========================
+                # 3. ALERTES
+                # =========================
+                if cle == "temperature" and valeur > 30:
+
+                    db.collection("users")\
+                        .document(USER_ID)\
+                        .collection("alerts")\
+                        .add({
+                            "sensorId": sensor_id,
+                            "message": f"Temp élevée {valeur}°C dans {piece}",
+                            "level": "critical",
+                            "read": False,
+                            "createdAt": firestore.SERVER_TIMESTAMP
+                        })
+
+                    print(f" ALERTE {piece}: {valeur}°C")
+
+            if ok_pour_archive:
+                derniere_archive = temps_actuel
+                print(" Historique sauvegardé")
+            else:
+                print(f" Update temps réel ({piece})")
+
     except KeyboardInterrupt:
-        print("\nArrêt de la passerelle...")
+        print("\n Arrêt")
         break
+
     except Exception as e:
-        print(f" Erreur imprévue : {e}")
-        time.sleep(2) # Pause pour éviter les boucles d'erreurs rapides
+        print(f" Erreur: {e}")
+        time.sleep(2)

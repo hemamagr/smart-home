@@ -2,59 +2,69 @@
 #include <DHT.h>
 #include <DHT_U.h>
 
-// --- CONFIGURATION DES BROCHES (PINS) ---
-#define DHTPIN A0       // Capteur Température/Humidité
+#define DHTPIN A0
 #define DHTTYPE DHT11
-#define LUMINOSITE_PIN A2 // Capteur de lumière (Analogique)
-#define MOUVEMENT_PIN 7   // Capteur PIR (Digital)
-#define CHOC_PIN 6        // Capteur de choc (Digital)
+
+#define LUMINOSITE_PIN A2
+#define MOUVEMENT_PIN 7
+#define CHOC_PIN 6
 
 DHT dht(DHTPIN, DHTTYPE);
 
 void setup() {
-  Serial.begin(9600); // Ouvre le tunnel vers ton script Python
-  
-  // Initialisation des capteurs
+  Serial.begin(9600);
+
   dht.begin();
   pinMode(MOUVEMENT_PIN, INPUT);
   pinMode(CHOC_PIN, INPUT);
-  
-  // Petit message de démarrage pour le débug
-  // (le script Python ignorera cette ligne car ce n'est pas du JSON)
-  Serial.println("Système Domotique Initialisé...");
+
+  Serial.println("Systeme OK");
 }
 
-// ---  FONCTION DE COMMUNICATION ---
-void EnvoyerJSON(float temp, float hum, int lum, bool mouv, bool choc) {
-  Serial.print("{ ");
-  Serial.print("\"temperature\": "); Serial.print(temp);
-  Serial.print(", \"humidite\": "); Serial.print(hum);
-  Serial.print(", \"luminosite\": "); Serial.print(lum);
-  
-  // On transforme 0/1 en vrai texte JSON true/false
-  Serial.print(", \"mouvement\": "); Serial.print(mouv ? "true" : "false");
-  Serial.print(", \"choc\": "); Serial.print(choc ? "true" : "false");
-  Serial.println(" }"); 
+// ===============================
+// Fonction JSON
+// ===============================
+void EnvoyerJSON(float temp, float hum, int lum, bool mouv, bool choc, String piece) {
+  Serial.print("{");
+
+  Serial.print("\"temperature\":"); Serial.print(temp);
+  Serial.print(",\"humidite\":"); Serial.print(hum);
+  Serial.print(",\"luminosite\":"); Serial.print(lum);
+  Serial.print(",\"mouvement\":"); Serial.print(mouv ? "true" : "false");
+  Serial.print(",\"choc\":"); Serial.print(choc ? "true" : "false");
+
+  Serial.print(",\"piece\":\""); Serial.print(piece); Serial.print("\"");
+
+  Serial.println("}");
 }
 
+// ===============================
+// LOOP
+// ===============================
 void loop() {
-  // 1. LECTURE DES DONNÉES REELLES
+
+  // Lecture capteurs REELS
   float h = dht.readHumidity();
   float t = dht.readTemperature();
   int lum = analogRead(LUMINOSITE_PIN);
   bool mov = digitalRead(MOUVEMENT_PIN);
-  bool chc = digitalRead(CHOC_PIN);
+  bool choc = digitalRead(CHOC_PIN);
 
-  // Vérification si le DHT11 répond bien
+  // sécurité DHT
   if (isnan(h) || isnan(t)) {
-    // Si le capteur est mal branché, on envoie des valeurs par défaut
-    t = 0.0;
-    h = 0.0;
+    h = 0;
+    t = 0;
   }
 
-  // 2. ENVOI AUTOMATIQUE VERS PYTHON
-  EnvoyerJSON(t, h, lum, mov, chc);
+  // ==========================
+  // SALON (données réelles)
+  // ==========================
+  EnvoyerJSON(t, h, lum, mov, choc, "salon");
+  delay(2000);
 
-  // 3. ATTENTE (Toutes les 5 secondes pour Firebase)
-  delay(5000);
+  // ==========================
+  // CHAMBRE (simulation)
+  // ==========================
+  EnvoyerJSON(t - 2, h - 5, lum - 10, mov, choc, "chambre");
+  delay(2000);
 }
