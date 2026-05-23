@@ -22,7 +22,7 @@
 #define HUM_SOL 6
 #define EAU 7
 #define LUX 8
-#define BUT 9
+#define BUTTON 9
 #define VIDEO 10
 
 struct capteur{

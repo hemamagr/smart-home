@@ -15,51 +15,51 @@ void lire_capteur(){
           char hum[8];
           dtostrf(value[0], 6, 2, temp);
           dtostrf(value[1], 6, 2, hum);
-          snprintf(data, sizeof(data),"température : %s , humidité : %s", temp, hum);
+          snprintf(data, sizeof(data),"\"température\" : %s , \"humidité\" : %s", temp, hum);
           a = b;
         }
         if((capteurs[i].type == EAU) && (eau(i)== 1)){
-        strcpy(data,"eau : True");
+        strcpy(data,"\"eau\" : \"True\"");
         }
       }
       if((capteurs[i].type == HUM_SOL) && (h_sol(i)== 1)){
         strcpy(data,"sol : True");
       }
       if((capteurs[i].type == LUX) && (digitalRead(i)== 1)){
-        strcpy(data,"eau : True");
+        strcpy(data,"\"eau\" : \"True\"");
       }
       
       if((capteurs[i].type == CHOC) && (digitalRead(i)== LOW)){
-        strcpy(data,"choc : True");
+        strcpy(data,"\"choc\" : \"True\"");
       }
       if((capteurs[i].type == SON) && (analogRead(i) == HIGH)){
         int bruit = digitalRead(i);
         if((bruit == HIGH)&& (s==0)){
-        strcpy(data,"son : True");
+        strcpy(data,"\"son\" : \"True\"");
         s = 1;
         mtd = millis();
         }
         if((bruit == LOW) && (s==1)){
           s=0;
           mtf = millis();
-          Serial.println(mtf-mtd);
+          //Serial.println(mtf-mtd);
         }
       }
       if(capteurs[i].type == MV){
         int mouve = digitalRead(i);
         if((mouve == HIGH)&& (m==0)){
-        strcpy(data,"mouvement : True");
+        strcpy(data,"\"mouvement\" : \"True\"");
         m = 1;
         mtd = millis();
         }
         if((mouve == LOW) && (m==1)){
           m=0;
           mtf = millis();
-          Serial.println(mtf-mtd);
+          //Serial.println(mtf-mtd);
         }
       }
       if (strlen(data) > 0){
-      Serial.print("{piece :");
+      Serial.print("{\"piece\" :");
       Serial.print(capteurs[i].piece);
       Serial.print(",");
       Serial.print(data);
